@@ -3,7 +3,7 @@ import { Globe, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
-export default function Navbar () {
+export default function NavBar () {
     const [isOpen,setIsOpen] = useState(false)
     return (
         <header className="sticky top-0 z-50 w-full border-b bg-white/95 backdrop-blur supports-backdrop-filter:bg-white/60">

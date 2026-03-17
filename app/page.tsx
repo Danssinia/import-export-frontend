@@ -1,9 +1,13 @@
 import { ArrowRight, Package, Ship, Truck } from "lucide-react";
 import Link from "next/link";
+import Footer from "./components/layout/Footer";
+import NavBar from "./components/layout/NavBar";
 
 export default function Home() {
   return (
     <div className="flex flex-col min-h-screen">
+      <NavBar/>
+
       <main className="flex-1">
         {/* Hero Section */}
         <section className="py-20 bg-linear-to-br from-blue-50 to-white">
@@ -72,6 +76,7 @@ export default function Home() {
           </div>
         </section>
       </main>
+      <Footer/>
     </div>
   )
 }
