@@ -10,6 +10,7 @@ const navItems = [
     {name:"Imports", href:"/dashboard/imports", icon: Import},
     {name:"Exports", href:"/dashboard/exports", icon: Ship},
     {name:"Settings", href:"/dashboard/settings", icon: Settings},
+    {name:"Products", href:"/dashboard/products", icon: Menu},
 ]
 
 interface SidebarProps{
