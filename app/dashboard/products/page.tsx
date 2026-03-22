@@ -3,8 +3,12 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
 
+/* ------------------ API ------------------ */
+const API_URL = "http://localhost:3000/products";
+
 /* ------------------ ZOD SCHEMA ------------------ */
 const schema = z.object({
+  seller_id:z.string().min(36, "Seller id required"),
   title: z.string().min(3, "Title too short"),
   description: z.string().min(5, "Description too short"),
   price: z.string().min(1, "Price required"),
@@ -22,23 +26,35 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<any>(null);
   const [errors, setErrors] = useState<any>({});
   const [loading, setLoading] = useState(false);
-
+  const [fetching, setFetching] = useState(false);
   const [form, setForm] = useState<any>({});
 
-  /* ------------------ FETCH ------------------ */
-  const fetchProducts = async () => {
-    const res = await fetch("/api/products");
-    setProducts(await res.json());
-  };
+  /* ------------------ PAGINATION ------------------ */
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
+  /* ------------------ FETCH PRODUCTS ------------------ */
   useEffect(() => {
     fetchProducts();
   }, []);
 
+  const fetchProducts = async () => {
+    setFetching(true);
+    try {
+      const res = await fetch(API_URL);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      setProducts(data);
+    } catch (err) {
+      console.error("Fetch error:", err);
+    }
+    setFetching(false);
+  };
+
   /* ------------------ FILTER ------------------ */
   const filtered = products.filter((p) => {
     return (
-      p.title.toLowerCase().includes(search.toLowerCase()) &&
+      p.title?.toLowerCase().includes(search.toLowerCase()) &&
       (categoryFilter ? p.category === categoryFilter : true) &&
       (stockFilter === "low"
         ? p.totalCount < 5
@@ -48,19 +64,24 @@ export default function ProductsPage() {
     );
   });
 
+  /* ------------------ PAGINATION ------------------ */
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedProducts = filtered.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   /* ------------------ IMAGE UPLOAD ------------------ */
   const handleImageUpload = (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
-    reader.onloadend = () => {
+    reader.onloadend = () =>
       setForm({ ...form, images: [reader.result] });
-    };
     reader.readAsDataURL(file);
   };
 
-  /* ------------------ SUBMIT ------------------ */
+  /* ------------------ CREATE / UPDATE ------------------ */
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     setLoading(true);
@@ -77,27 +98,34 @@ export default function ProductsPage() {
       return;
     }
 
-    setErrors({});
+    try {
+      if (editing) {
+        await fetch(`${API_URL}/${editing.product_id}`, {
+          method: "PUT", // or PATCH
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(result.data),
+        });
+      } else {
+        await fetch(API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(result.data),
+        });
+      }
 
-    const url = editing
-      ? `/api/products/${editing.product_id}`
-      : "/api/products";
+      await fetchProducts();
+      setOpen(false);
+      setEditing(null);
+      setForm({});
+      setErrors({});
+    } catch (err) {
+      console.error("Save error:", err);
+    }
 
-    const method = editing ? "PUT" : "POST";
-
-    await fetch(url, {
-      method,
-      body: JSON.stringify({
-        ...result.data,
-        seller_id: "REPLACE_WITH_USER_ID",
-        type: "IMPORT",
-      }),
-    });
-
-    setOpen(false);
-    setEditing(null);
-    setForm({});
-    fetchProducts();
     setLoading(false);
   };
 
@@ -110,24 +138,27 @@ export default function ProductsPage() {
 
   /* ------------------ DELETE ------------------ */
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this product?")) return;
-    await fetch(`/api/products/${id}`, { method: "DELETE" });
-    fetchProducts();
+    if (!confirm("Are you sure you want to delete this product?")) return;
+
+    try {
+      await fetch(`${API_URL}/${id}`, {
+        method: "DELETE",
+      });
+      setProducts((prev) => prev.filter((p) => p.product_id !== id));
+    } catch (err) {
+      console.error("Delete error:", err);
+    }
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 font-sans">
 
       {/* HEADER */}
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Products</h1>
+        <h1 className="text-3xl font-bold text-gray-800">Product Inventory</h1>
         <button
-          onClick={() => {
-            setOpen(true);
-            setEditing(null);
-            setForm({});
-          }}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg"
+          onClick={() => { setOpen(true); setEditing(null); setForm({}); }}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg shadow"
         >
           + Add Product
         </button>
@@ -137,79 +168,70 @@ export default function ProductsPage() {
       <div className="bg-white p-4 rounded-xl shadow flex flex-wrap gap-3">
         <input
           placeholder="Search..."
-          className="border p-2 rounded"
-          onChange={(e) => setSearch(e.target.value)}
+          className="border p-2 rounded flex-1"
+          onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
         />
-
         <input
           placeholder="Category"
-          className="border p-2 rounded"
-          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="border p-2 rounded flex-1"
+          onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
         />
-
         <select
           className="border p-2 rounded"
-          onChange={(e) => setStockFilter(e.target.value)}
+          onChange={(e) => { setStockFilter(e.target.value); setCurrentPage(1); }}
         >
           <option value="">All Stock</option>
           <option value="low">Low Stock</option>
-          <option value="high">In Stock</option>
+          <option value="high">High Stock</option>
         </select>
       </div>
 
       {/* TABLE */}
       <div className="bg-white rounded-xl shadow overflow-hidden">
         <table className="w-full">
-          <thead className="bg-gray-50 text-left">
+          <thead className="bg-gray-100">
             <tr>
               <th className="p-4">Product</th>
-              <th className="p-4">Category</th>
-              <th className="p-4">Price</th>
-              <th className="p-4">Stock</th>
-              <th className="p-4 text-right">Actions</th>
+              <th>Category</th>
+              <th>Price</th>
+              <th>Stock</th>
+              <th className="text-right p-4">Actions</th>
             </tr>
           </thead>
-
           <tbody>
-            {filtered.map((p) => (
-              <tr key={p.product_id} className="border-t">
-                <td className="p-4 flex items-center gap-3">
-                  {p.images?.[0] && (
-                    <img
-                      src={p.images[0]}
-                      className="w-10 h-10 rounded object-cover"
-                    />
-                  )}
-                  {p.title}
-                </td>
-                <td>{p.category}</td>
-                <td>${p.price}</td>
-                <td>{p.totalCount}</td>
-
-                <td className="p-4 text-right space-x-2">
-                  <button
-                    onClick={() => handleEdit(p)}
-                    className="px-3 py-1 bg-yellow-400 text-white rounded"
-                  >
-                    Edit
-                  </button>
-
-                  <button
-                    onClick={() => handleDelete(p.product_id)}
-                    className="px-3 py-1 bg-red-500 text-white rounded"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-
-            {filtered.length === 0 && (
+            {fetching ? (
               <tr>
-                <td colSpan={5} className="text-center p-6 text-gray-500">
-                  No products found
-                </td>
+                <td colSpan={5} className="text-center p-6">Loading...</td>
               </tr>
+            ) : paginatedProducts.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="text-center p-6">No products found</td>
+              </tr>
+            ) : (
+              paginatedProducts.map((p) => (
+                <tr key={p.product_id} className="border-t">
+                  <td className="p-4 flex gap-3">
+                    {p.images?.[0] && (
+                      <img src={p.images[0]} className="w-12 h-12 rounded" />
+                    )}
+                    <div>
+                      <div>{p.title}</div>
+                      <div className="text-sm text-gray-500">{p.description}</div>
+                    </div>
+                  </td>
+                  <td>{p.category}</td>
+                  <td>${p.price}</td>
+                  <td>{p.totalCount}</td>
+                  <td className="p-4 text-right space-x-2">
+                    <button onClick={() => handleEdit(p)} className="bg-yellow-400 px-3 py-1 rounded text-white">
+                      Edit
+                    </button>
+                    <button onClick={() => handleDelete(p.product_id)} className="bg-red-500 px-3 py-1 rounded text-white">
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>
@@ -217,94 +239,25 @@ export default function ProductsPage() {
 
       {/* MODAL */}
       {open && (
-        <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
-          <form
-            onSubmit={handleSubmit}
-            className="bg-white p-6 rounded-xl w-full max-w-md space-y-3"
-          >
-            <h2 className="text-lg font-semibold">
-              {editing ? "Edit Product" : "Add Product"}
-            </h2>
-
-            <input
-              placeholder="Title"
-              value={form.title || ""}
-              onChange={(e) =>
-                setForm({ ...form, title: e.target.value })
-              }
-              className="border p-2 w-full"
-            />
-            {errors.title && <p className="text-red-500">{errors.title}</p>}
-
-            <input
-              placeholder="Price"
-              value={form.price || ""}
-              onChange={(e) =>
-                setForm({ ...form, price: e.target.value })
-              }
-              className="border p-2 w-full"
-            />
-
-            <input
-              placeholder="Category"
-              value={form.category || ""}
-              onChange={(e) =>
-                setForm({ ...form, category: e.target.value })
-              }
-              className="border p-2 w-full"
-            />
-
-            <input
-              type="number"
-              placeholder="Stock"
-              value={form.totalCount || ""}
-              onChange={(e) =>
-                setForm({ ...form, totalCount: e.target.value })
-              }
-              className="border p-2 w-full"
-            />
-
-            <textarea
-              placeholder="Description"
-              value={form.description || ""}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-              className="border p-2 w-full"
-            />
-
+        <div className="fixed inset-0 bg-black/40 flex justify-center items-center">
+          <form onSubmit={handleSubmit} className="bg-white p-6 rounded w-full max-w-md space-y-3">
+            <input placeholder="Seller ID" value={form.seller_id || ""} onChange={(e) => setForm({ ...form, seller_id: e.target.value })} className="border p-2 w-full"/>
+            <input placeholder="Title" value={form.title || ""} onChange={(e) => setForm({ ...form, title: e.target.value })} className="border p-2 w-full"/>
+            <input placeholder="Price" value={form.price || ""} onChange={(e) => setForm({ ...form, price: e.target.value })} className="border p-2 w-full"/>
+            <input placeholder="Category" value={form.category || ""} onChange={(e) => setForm({ ...form, category: e.target.value })} className="border p-2 w-full"/>
+            <input type="number" placeholder="Stock" value={form.totalCount || ""} onChange={(e) => setForm({ ...form, totalCount: e.target.value })} className="border p-2 w-full"/>
+            <textarea placeholder="Description" value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} className="border p-2 w-full"/>
             <input type="file" onChange={handleImageUpload} />
-            {errors.images && (
-              <p className="text-red-500">{errors.images}</p>
-            )}
 
-            {form.images?.[0] && (
-              <img
-                src={form.images[0]}
-                className="h-32 rounded object-cover"
-              />
-            )}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="border px-3 py-1 rounded"
-              >
-                Cancel
-              </button>
-
-              <button
-                disabled={loading}
-                className="bg-blue-600 text-white px-3 py-1 rounded"
-              >
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setOpen(false)}>Cancel</button>
+              <button className="bg-blue-600 text-white px-3 py-1 rounded">
                 {loading ? "Saving..." : "Save"}
               </button>
             </div>
           </form>
         </div>
       )}
-
     </div>
   );
 }
