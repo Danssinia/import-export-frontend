@@ -8,13 +8,12 @@ const API_URL = "http://localhost:3000/products";
 
 /* ------------------ ZOD SCHEMA ------------------ */
 const schema = z.object({
-  seller_id:z.string().min(36, "Seller id required"),
+  seller_id: z.string().min(36, "Seller id required"),
   title: z.string().min(3, "Title too short"),
   description: z.string().min(5, "Description too short"),
   price: z.string().min(1, "Price required"),
   category: z.string().min(2, "Category required"),
   totalCount: z.coerce.number().min(0, "Stock required"),
-  images: z.array(z.string()).min(1, "Image required"),
 });
 
 export default function ProductsPage() {
@@ -72,62 +71,69 @@ export default function ProductsPage() {
   );
 
   /* ------------------ IMAGE UPLOAD ------------------ */
-  const handleImageUpload = (e: any) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () =>
-      setForm({ ...form, images: [reader.result] });
-    reader.readAsDataURL(file);
-  };
-
+ //const handleImageUpload = (e: any) => {
+ // const file = e.target.files[0]; if (!file) return; setForm({ ...form, file }); // store actual file
+//};
+const handleImageUpload = (e: any) => {
+  setForm({ ...form, files: e.target.files });
+};
   /* ------------------ CREATE / UPDATE ------------------ */
-  const handleSubmit = async (e: any) => {
-    e.preventDefault();
-    setLoading(true);
+const handleSubmit = async (e: any) => {
+  e.preventDefault();
+  setLoading(true);
 
-    const result = schema.safeParse(form);
+  const result = schema.safeParse(form);
 
-    if (!result.success) {
-      const fieldErrors: any = {};
-      result.error.issues.forEach((err) => {
-        fieldErrors[err.path[0]] = err.message;
-      });
-      setErrors(fieldErrors);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      if (editing) {
-        await fetch(`${API_URL}/${editing.product_id}`, {
-          method: "PUT", // or PATCH
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(result.data),
-        });
-      } else {
-        await fetch(API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(result.data),
-        });
-      }
-
-      await fetchProducts();
-      setOpen(false);
-      setEditing(null);
-      setForm({});
-      setErrors({});
-    } catch (err) {
-      console.error("Save error:", err);
-    }
-
+  if (!result.success) {
+    const fieldErrors: any = {};
+    result.error.issues.forEach((err) => {
+      fieldErrors[err.path[0]] = err.message;
+    });
+    setErrors(fieldErrors);
     setLoading(false);
-  };
+    return;
+  }
+
+  try {
+    const formData = new FormData();
+
+    // append all fields
+    formData.append("seller_id", form.seller_id);
+    formData.append("title", form.title);
+    formData.append("description", form.description);
+    formData.append("price", form.price);
+    formData.append("category", form.category);
+    formData.append("totalCount", String(form.totalCount));
+
+    // append file
+   if (form.files) {
+  Array.from(form.files).forEach((file: any) => {
+    formData.append("images", file);
+  });
+}
+
+    const url = editing
+      ? `${API_URL}/${editing.product_id}`
+      : API_URL;
+
+    const method = editing ? "PATCH" : "POST";
+
+    await fetch(url, {
+      method,
+      body: formData, // ✅ IMPORTANT: no headers
+    });
+
+    await fetchProducts();
+    setOpen(false);
+    setEditing(null);
+    setForm({});
+    setErrors({});
+  } catch (err) {
+    console.error("Save error:", err);
+  }
+
+  setLoading(false);
+};
 
   /* ------------------ EDIT ------------------ */
   const handleEdit = (p: any) => {
@@ -141,7 +147,8 @@ export default function ProductsPage() {
     if (!confirm("Are you sure you want to delete this product?")) return;
 
     try {
-      await fetch(`${API_URL}/${id}`, {
+      await fetch(`${API_URL}/${id}`, //fetch(`${API_URL}?seller_id=YOUR_ID`)
+        {
         method: "DELETE",
       });
       setProducts((prev) => prev.filter((p) => p.product_id !== id));
@@ -211,9 +218,12 @@ export default function ProductsPage() {
               paginatedProducts.map((p) => (
                 <tr key={p.product_id} className="border-t">
                   <td className="p-4 flex gap-3">
-                    {p.images?.[0] && (
-                      <img src={p.images[0]} className="w-12 h-12 rounded" />
-                    )}
+                   {p.images?.[0] && (
+  <img
+    src={`http://localhost:3000/uploads/${p.images[0]}`}
+    className="w-12 h-12 rounded"
+  />
+)}
                     <div>
                       <div>{p.title}</div>
                       <div className="text-sm text-gray-500">{p.description}</div>
